@@ -1,0 +1,23 @@
+{
+  "development": {
+    "use_env_variable": "DATABASE_URL",
+    "dialect": "postgres",
+    "logging": false,
+    "seederStorage": "sequelize",
+    "seederStorageTableName": "SequelizeData"
+  },
+  "test": {
+    "use_env_variable": "DATABASE_URL",
+    "dialect": "postgres",
+    "logging": false,
+    "seederStorage": "sequelize",
+    "seederStorageTableName": "SequelizeData"
+  },
+  "production": {
+    "use_env_variable": "DATABASE_URL",
+    "dialect": "postgres",
+    "logging": false,
+    "seederStorage": "sequelize",
+    "seederStorageTableName": "SequelizeData"
+  }
+}

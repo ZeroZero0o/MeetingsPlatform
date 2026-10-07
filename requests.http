@@ -1,0 +1,135 @@
+@base = http://localhost:3000
+
+### Регистрация
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "new.user@meetings.local",
+  "password": "User12345"
+}
+
+### Вход администратора
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@meetings.local",
+  "password": "Admin123!"
+}
+
+###
+@token = {{login.response.body.token}}
+
+### Текущий пользователь
+GET {{base}}/profile
+Authorization: Bearer {{token}}
+
+### Описание API
+GET {{base}}/
+
+### Список встреч
+GET {{base}}/meetings
+
+### Встречи со статусом planned
+GET {{base}}/meetings?status=planned
+
+### Встреча по id
+GET {{base}}/meetings/1
+
+### Несуществующая встреча
+GET {{base}}/meetings/999
+
+### Некорректный id
+GET {{base}}/meetings/abc
+
+### Создать встречу
+POST {{base}}/meetings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Ретроспектива спринта",
+  "date": "2026-10-17T08:00:00.000Z",
+  "location": "Конференц-зал Б",
+  "organizer": "Сидорова А.А.",
+  "participants": ["Иванов И.И.", "Петров П.П."],
+  "status": "planned",
+  "description": "Разбор итогов спринта",
+  "durationMin": 50
+}
+
+### Создать встречу без обязательных полей
+POST {{base}}/meetings
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "location": "Кабинет 12"
+}
+
+### Полностью обновить встречу
+PUT {{base}}/meetings/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Планерка отдела разработки (обновлено)",
+  "date": "2026-10-10T07:30:00.000Z",
+  "location": "Конференц-зал А",
+  "organizer": "Иванов И.И.",
+  "participants": ["Петров П.П.", "Сидорова А.А.", "Кузнецов Д.А."],
+  "status": "in_progress",
+  "description": "Обсуждение итогов недели и плана спринта",
+  "durationMin": 45
+}
+
+### Удалить встречу
+DELETE {{base}}/meetings/1
+Authorization: Bearer {{token}}
+
+### Список повесток
+GET {{base}}/agendas
+
+### Повестка встречи 2
+GET {{base}}/agendas?meetingId=2
+
+### Создать повестку
+POST {{base}}/agendas
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "meetingId": 2,
+  "title": "Дополнительная повестка",
+  "items": [
+    { "order": 1, "topic": "Открытые вопросы", "speaker": "Петрова М.С.", "durationMin": 10 }
+  ]
+}
+
+### Список протоколов
+GET {{base}}/protocols
+
+### Протокол встречи 2
+GET {{base}}/protocols?meetingId=2
+
+### Создать протокол
+POST {{base}}/protocols
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "meetingId": 2,
+  "date": "2026-10-03T10:30:00.000Z",
+  "secretary": "Кузнецов Д.А.",
+  "attendees": ["Петрова М.С.", "Иванов И.И."],
+  "decisions": [
+    {
+      "text": "Подготовить отчёт по API",
+      "responsible": "Иванов И.И.",
+      "deadline": "2026-10-12"
+    }
+  ],
+  "summary": "Дополнительные поручения зафиксированы."
+}
