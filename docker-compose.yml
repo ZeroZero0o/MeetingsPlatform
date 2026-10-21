@@ -16,5 +16,24 @@ services:
       timeout: 5s
       retries: 20
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meetings-api
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://meetings:meetings@db:5432/meetings
+    volumes:
+      - ./src:/app/src
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   meetings_pgdata:

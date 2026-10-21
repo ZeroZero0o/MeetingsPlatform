@@ -7,7 +7,7 @@ const protocolsRouter = require('./routes/protocols');
 const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
-const { sequelize } = require('./models');
+const { sequelize } = require('../models');
 
 const app = express();
 const port = process.env.PORT || 3000;
