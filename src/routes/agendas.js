@@ -1,5 +1,5 @@
 const express = require('express');
-const { sequelize, Meeting, Agenda, AgendaItem } = require('../models');
+const { sequelize, Meeting, Agenda, AgendaItem } = require('../../models');
 const {
   createError,
   readId,

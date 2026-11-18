@@ -1,5 +1,5 @@
 const express = require('express');
-const { User } = require('../models');
+const { User } = require('../../models');
 const { authenticate } = require('../middleware/auth');
 const { createError, asyncHandler } = require('../utils/errors');
 

@@ -13,3 +13,4 @@ dist
 Dockerfile
 docker-compose.yml
 .dockerignore
+client

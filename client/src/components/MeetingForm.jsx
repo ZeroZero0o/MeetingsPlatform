@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { STATUSES, STATUS_LABELS } from '../data/initialMeetings.js';
+import { toDateTimeLocal } from '../utils/format.js';
 
 function toFormValues(meeting) {
   return {
     title: meeting?.title ?? '',
-    date: meeting?.date ?? '',
+    date: toDateTimeLocal(meeting?.date),
     location: meeting?.location ?? '',
     organizer: meeting?.organizer ?? '',
     status: meeting?.status ?? 'planned',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import useLocalStorage from '../hooks/useLocalStorage.js';
-import initialMeetings, { STATUSES, STATUS_LABELS, STORAGE_KEY } from '../data/initialMeetings.js';
+import { STATUSES, STATUS_LABELS } from '../data/initialMeetings.js';
+import useMeetings from '../hooks/useMeetings.js';
 import MeetingForm from './MeetingForm.jsx';
 import MeetingItem from './MeetingItem.jsx';
 
@@ -12,19 +12,24 @@ const SORT_OPTIONS = [
 ];
 
 export default function MeetingList() {
-  const [items, setItems] = useLocalStorage(STORAGE_KEY, initialMeetings);
+  const {
+    items,
+    loading,
+    error,
+    search,
+    setSearch,
+    notification,
+    reload,
+    add,
+    remove,
+    edit,
+  } = useMeetings();
+
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('date-asc');
   const [editing, setEditing] = useState(null);
-  const [loading, setLoading] = useState(true);
 
-  // Имитация загрузки с сервера (задержка 1 секунда)
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Изменение заголовка страницы в зависимости от количества встреч
+  // Изменение заголовка страницы в зависимости от количества встреч.
   useEffect(() => {
     document.title = `Встречи (${items.length}) — Система собраний`;
     return () => {
@@ -65,32 +70,51 @@ export default function MeetingList() {
 
   function handleSubmit(data) {
     if (editing) {
-      setItems((prev) => prev.map((m) => (m.id === editing.id ? { ...m, ...data } : m)));
+      const id = editing.id;
+      edit(id, data);
       setEditing(null);
     } else {
-      const nextId = items.length ? Math.max(...items.map((m) => m.id)) + 1 : 1;
-      setItems((prev) => [...prev, { ...data, id: nextId }]);
+      add(data);
     }
   }
 
   function handleDelete(id) {
-    setItems((prev) => prev.filter((m) => m.id !== id));
+    remove(id);
     if (editing?.id === id) {
       setEditing(null);
     }
   }
 
-  function handleEdit(meeting) {
-    setEditing(meeting);
+  // Первичная загрузка — полностраничный индикатор.
+  if (loading && items.length === 0) {
+    return <div className="loading">Загрузка встреч…</div>;
   }
 
-  if (loading) {
-    return <div className="loading">Загрузка встреч…</div>;
+  // Ошибка при первичной загрузке — сообщение и кнопка «Повторить».
+  if (error && items.length === 0) {
+    return (
+      <div className="error-banner">
+        <p>Не удалось загрузить встречи: {error}</p>
+        <button type="button" onClick={reload}>
+          Повторить
+        </button>
+      </div>
+    );
   }
 
   return (
     <section className="meeting-list">
       <div className="controls">
+        <label className="search-field">
+          Поиск:
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Название, организатор, место…"
+          />
+          {loading && <span className="search-hint">Загрузка…</span>}
+        </label>
         <label>
           Фильтр по статусу:
           <select value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -113,6 +137,15 @@ export default function MeetingList() {
           </select>
         </label>
       </div>
+
+      {error && (
+        <div className="error-banner">
+          <p>{error}</p>
+          <button type="button" onClick={reload}>
+            Повторить
+          </button>
+        </div>
+      )}
 
       <div className="stats">
         <span>Всего: {stats.byStatus.all}</span>
@@ -139,11 +172,17 @@ export default function MeetingList() {
             <MeetingItem
               key={meeting.id}
               meeting={meeting}
-              onEdit={handleEdit}
+              onEdit={setEditing}
               onDelete={handleDelete}
             />
           ))}
         </ul>
+      )}
+
+      {notification && (
+        <div className={`notification notification-${notification.type}`}>
+          {notification.message}
+        </div>
       )}
     </section>
   );

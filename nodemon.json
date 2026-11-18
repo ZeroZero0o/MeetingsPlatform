@@ -1,0 +1,5 @@
+{
+  "watch": ["src", "models", "migrations", "seeders", "config"],
+  "ext": "js,json",
+  "legacyWatch": true
+}

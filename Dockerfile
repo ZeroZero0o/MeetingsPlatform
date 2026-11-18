@@ -2,21 +2,23 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Гарантируем установку dev-зависимостей (nodemon, sequelize-cli).
+ENV NODE_ENV=development
 
+# Манифесты — для кэширования слоя зависимостей.
 COPY package*.json ./
 
+# Все зависимости, включая dev (nodemon, sequelize-cli).
+RUN npm install
 
-RUN npm install --omit=dev
-
-
+# Исходники, модели, миграции, сиды и конфигурация.
 COPY . .
 
+# Скрипт запуска: применяет миграции/сиды, затем стартует сервер.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
+RUN chmod +x /usr/local/bin/docker-entrypoint
 
 EXPOSE 3000
 
-
-ENV NODE_ENV=production
-ENV PORT=3000
-
-
-CMD ["node", "src/server.js"]
+ENTRYPOINT ["docker-entrypoint"]
+CMD ["npm", "run", "dev"]

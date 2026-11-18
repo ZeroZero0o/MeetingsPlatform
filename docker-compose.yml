@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: meetings
       POSTGRES_DB: meetings
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - meetings_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,17 +22,39 @@ services:
       dockerfile: Dockerfile
     container_name: meetings-api
     ports:
-      - "${PORT:-3000}:${PORT:-3000}"
-    env_file:
-      - .env
+      - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://meetings:meetings@db:5432/meetings
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://meetings:meetings@db:5432/meetings
+      JWT_SECRET: ${JWT_SECRET:-meetings-course-jwt-secret-7f3a9c2e1b}
     volumes:
       - ./src:/app/src
-      - /app/node_modules
+      - ./models:/app/models
+      - ./migrations:/app/migrations
+      - ./seeders:/app/seeders
+      - ./config:/app/config
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: meetings-client
+    ports:
+      - "5173:5173"
+    volumes:
+      # Монтируются только исходники для hot-reload (Vite HMR).
+      # node_modules берётся из образа.
+      - ./client/src:/app/src
+      - ./client/index.html:/app/index.html
+      - ./client/vite.config.js:/app/vite.config.js
+      - ./client/.env:/app/.env
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:

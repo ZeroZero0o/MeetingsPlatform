@@ -1,6 +1,6 @@
 const express = require('express');
 const { Op } = require('sequelize');
-const { Meeting, Agenda, Protocol } = require('../models');
+const { Meeting, Agenda, Protocol } = require('../../models');
 const {
   createError,
   readId,
@@ -71,6 +71,18 @@ router.get('/', asyncHandler(async (req, res) => {
     }
     const pattern = `%${organizer.replace(/[\\%_]/g, '\\$&')}%`;
     where.organizer = { [Op.iLike]: pattern };
+  }
+
+  if (req.query.search !== undefined) {
+    const search = String(req.query.search).trim();
+    if (search) {
+      const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+      where[Op.or] = [
+        { title: { [Op.iLike]: pattern } },
+        { organizer: { [Op.iLike]: pattern } },
+        { location: { [Op.iLike]: pattern } },
+      ];
+    }
   }
 
   const meetings = await Meeting.findAll({
