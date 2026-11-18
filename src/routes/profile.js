@@ -5,12 +5,22 @@ const { createError, asyncHandler } = require('../utils/errors');
 
 const router = express.Router();
 
+function formatUser(user) {
+  return {
+    id: user._id.toString(),
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
 router.get('/', authenticate, asyncHandler(async (req, res) => {
-  const user = await User.findByPk(req.user.id);
+  const user = await User.findById(req.user.id);
   if (!user) {
     throw createError(401, 'Пользователь не найден');
   }
-  res.json(user);
+  res.json(formatUser(user));
 }));
 
 module.exports = router;

@@ -8,10 +8,11 @@ const authRouter = require('./routes/auth');
 const profileRouter = require('./routes/profile');
 const cors = require('./middleware/cors');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
-const { sequelize } = require('../models');
+const { mongoose } = require('../models');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/meetings';
 
 app.use(cors);
 app.use(express.json());
@@ -45,13 +46,14 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-sequelize.authenticate()
+mongoose.connect(mongoUri)
   .then(() => {
     app.listen(port, () => {
       console.log(`Server running on http://localhost:${port}`);
+      console.log('MongoDB connected');
     });
   })
   .catch((error) => {
-    console.error('Не удалось подключиться к PostgreSQL:', error.message);
+    console.error('Не удалось подключиться к MongoDB:', error.message);
     process.exit(1);
   });

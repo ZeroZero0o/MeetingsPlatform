@@ -1,18 +1,14 @@
 services:
-  db:
-    image: postgres:16
-    container_name: meetings-postgres
-    environment:
-      POSTGRES_USER: meetings
-      POSTGRES_PASSWORD: meetings
-      POSTGRES_DB: meetings
+  mongo:
+    image: mongo:7
+    container_name: meetings-mongo
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - meetings_pgdata:/var/lib/postgresql/data
+      - meetings_mongodata:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meetings -d meetings"]
-      interval: 2s
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
       timeout: 5s
       retries: 20
 
@@ -26,16 +22,16 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3000
-      DATABASE_URL: postgresql://meetings:meetings@db:5432/meetings
+      MONGO_URI: mongodb://mongo:27017/meetings
       JWT_SECRET: ${JWT_SECRET:-meetings-course-jwt-secret-7f3a9c2e1b}
     volumes:
+      # Исходники монтируются для hot-reload (nodemon).
+      # node_modules берётся из образа.
       - ./src:/app/src
       - ./models:/app/models
-      - ./migrations:/app/migrations
-      - ./seeders:/app/seeders
-      - ./config:/app/config
+      - ./seed.js:/app/seed.js
     depends_on:
-      db:
+      mongo:
         condition: service_healthy
     restart: unless-stopped
 
@@ -58,4 +54,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  meetings_pgdata:
+  meetings_mongodata:

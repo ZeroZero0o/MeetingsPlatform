@@ -4,12 +4,13 @@ function createError(status, message) {
   return error;
 }
 
+const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
+
 function readId(raw) {
-  const id = Number(raw);
-  if (!Number.isInteger(id) || id <= 0) {
+  if (typeof raw !== 'string' || !OBJECT_ID_RE.test(raw)) {
     throw createError(400, 'Некорректный идентификатор');
   }
-  return id;
+  return raw;
 }
 
 function assertObject(body) {

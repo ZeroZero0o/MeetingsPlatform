@@ -6,6 +6,16 @@ const { createError, assertObject, requireText, asyncHandler } = require('../uti
 
 const router = express.Router();
 
+function formatUser(user) {
+  return {
+    id: user._id.toString(),
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
 function readCredentials(body) {
   assertObject(body);
 
@@ -23,7 +33,7 @@ function readCredentials(body) {
 
 function signToken(user) {
   return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
+    { id: user._id.toString(), email: user.email, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: '1h' },
   );
@@ -31,7 +41,7 @@ function signToken(user) {
 
 router.post('/register', asyncHandler(async (req, res) => {
   const { email, password } = readCredentials(req.body);
-  const existing = await User.findOne({ where: { email } });
+  const existing = await User.findOne({ email });
   if (existing) {
     throw createError(409, 'Пользователь с таким email уже существует');
   }
@@ -42,12 +52,12 @@ router.post('/register', asyncHandler(async (req, res) => {
     role: 'user',
   });
 
-  res.status(201).json(user);
+  res.status(201).json(formatUser(user));
 }));
 
 router.post('/login', asyncHandler(async (req, res) => {
   const { email, password } = readCredentials(req.body);
-  const user = await User.findOne({ where: { email } });
+  const user = await User.findOne({ email });
   const matches = user ? await bcrypt.compare(password, user.passwordHash) : false;
   if (!user || !matches) {
     throw createError(401, 'Неверный email или пароль');
@@ -55,7 +65,7 @@ router.post('/login', asyncHandler(async (req, res) => {
 
   res.json({
     token: signToken(user),
-    user,
+    user: formatUser(user),
   });
 }));
 

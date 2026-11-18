@@ -15,16 +15,24 @@ function errorHandler(err, req, res, next) {
     return;
   }
 
-  if (err.name === 'SequelizeValidationError' || err.name === 'SequelizeUniqueConstraintError') {
-    const message = Array.isArray(err.errors) && err.errors.length
-      ? err.errors.map((item) => item.message).join('; ')
-      : err.message;
-    res.status(400).json({ error: message });
+  // Ошибки валидации Mongoose (например, не прошло required/enum).
+  if (err.name === 'ValidationError') {
+    const message = Object.values(err.errors || {})
+      .map((item) => item.message)
+      .join('; ');
+    res.status(400).json({ error: message || err.message });
     return;
   }
 
-  if (err.name === 'SequelizeForeignKeyConstraintError') {
-    res.status(400).json({ error: 'Нарушена связь между таблицами' });
+  // Некорректный ObjectId (CastError) — неверный идентификатор.
+  if (err.name === 'CastError') {
+    res.status(400).json({ error: 'Некорректный идентификатор' });
+    return;
+  }
+
+  // Дубликат уникального поля (например, email).
+  if (err.name === 'MongoServerError' && err.code === 11000) {
+    res.status(409).json({ error: 'Запись с таким значением уже существует' });
     return;
   }
 

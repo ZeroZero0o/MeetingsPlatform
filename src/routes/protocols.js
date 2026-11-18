@@ -1,5 +1,6 @@
 const express = require('express');
-const { sequelize, Meeting, Protocol, Decision } = require('../../models');
+const mongoose = require('mongoose');
+const { Meeting, Protocol } = require('../../models');
 const {
   createError,
   readId,
@@ -14,24 +15,23 @@ const { authenticate, isAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-const protocolInclude = [{ model: Decision, as: 'decisions' }];
-const protocolOrder = [
-  ['id', 'ASC'],
-  [{ model: Decision, as: 'decisions' }, 'id', 'ASC'],
-];
+function formatDecision(decision) {
+  return {
+    id: decision._id ? decision._id.toString() : undefined,
+    text: decision.text,
+    responsible: decision.responsible || '',
+    deadline: decision.deadline || '',
+  };
+}
 
 function formatProtocol(protocol) {
   return {
-    id: protocol.id,
-    meetingId: protocol.meetingId,
+    id: protocol._id.toString(),
+    meetingId: protocol.meetingId ? protocol.meetingId.toString() : null,
     date: protocol.date,
     secretary: protocol.secretary,
     attendees: protocol.attendees || [],
-    decisions: (protocol.decisions || []).map((item) => ({
-      text: item.text,
-      responsible: item.responsible || '',
-      deadline: item.deadline || '',
-    })),
+    decisions: (protocol.decisions || []).map(formatDecision),
     summary: protocol.summary,
     createdAt: protocol.createdAt,
     updatedAt: protocol.updatedAt,
@@ -41,11 +41,7 @@ function formatProtocol(protocol) {
 function buildProtocol(body) {
   assertObject(body);
 
-  const meetingId = Number(body.meetingId);
-  if (!Number.isInteger(meetingId) || meetingId <= 0) {
-    throw createError(400, 'Поле meetingId должно быть положительным целым числом');
-  }
-
+  const meetingId = readId(body.meetingId);
   if (!Array.isArray(body.decisions)) {
     throw createError(400, 'Поле decisions должно быть массивом решений');
   }
@@ -55,7 +51,7 @@ function buildProtocol(body) {
       throw createError(400, `Элемент decisions[${index}] должен быть объектом`);
     }
 
-    let deadline = null;
+    let deadline = '';
     if (item.deadline !== undefined && item.deadline !== null && item.deadline !== '') {
       if (typeof item.deadline !== 'string' || Number.isNaN(Date.parse(item.deadline))) {
         throw createError(400, `Поле decisions[${index}].deadline должно быть корректной датой`);
@@ -80,53 +76,70 @@ function buildProtocol(body) {
   };
 }
 
+function buildDecision(body, field = 'decision') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw createError(400, `Поле ${field} должно быть объектом`);
+  }
+
+  const decision = {
+    text: requireText(body.text, `${field}.text`),
+  };
+
+  if (body.responsible !== undefined) {
+    decision.responsible = optionalText(body.responsible, `${field}.responsible`);
+  }
+  if (body.deadline !== undefined && body.deadline !== null && body.deadline !== '') {
+    if (typeof body.deadline !== 'string' || Number.isNaN(Date.parse(body.deadline))) {
+      throw createError(400, `Поле ${field}.deadline должно быть корректной датой`);
+    }
+    decision.deadline = body.deadline.trim().slice(0, 10);
+  }
+
+  return decision;
+}
+
+// Частичное обновление элемента массива: включаются только переданные поля.
+function buildDecisionPatch(body) {
+  assertObject(body);
+  const patch = {};
+
+  if (body.text !== undefined) patch.text = requireText(body.text, 'text');
+  if (body.responsible !== undefined) patch.responsible = optionalText(body.responsible, 'responsible');
+  if (body.deadline !== undefined) {
+    if (body.deadline !== null && body.deadline !== '') {
+      if (typeof body.deadline !== 'string' || Number.isNaN(Date.parse(body.deadline))) {
+        throw createError(400, 'Поле deadline должно быть корректной датой');
+      }
+      patch.deadline = body.deadline.trim().slice(0, 10);
+    } else {
+      patch.deadline = '';
+    }
+  }
+
+  return patch;
+}
+
 async function ensureMeeting(meetingId) {
-  const meeting = await Meeting.findByPk(meetingId);
-  if (!meeting) {
+  const exists = await Meeting.exists({ _id: meetingId });
+  if (!exists) {
     throw createError(400, 'Встреча с указанным meetingId не найдена');
   }
 }
 
-async function saveDecisions(data, protocol, transaction) {
-  if (data.decisions.length === 0) {
-    return;
-  }
-  await Decision.bulkCreate(
-    data.decisions.map((item) => ({
-      protocolId: protocol.id,
-      text: item.text,
-      responsible: item.responsible,
-      deadline: item.deadline,
-    })),
-    { transaction },
-  );
-}
-
 router.get('/', asyncHandler(async (req, res) => {
-  const where = {};
+  const filter = {};
 
   if (req.query.meetingId !== undefined) {
-    const meetingId = Number(req.query.meetingId);
-    if (!Number.isInteger(meetingId) || meetingId <= 0) {
-      throw createError(400, 'Параметр meetingId должен быть положительным целым числом');
-    }
-    where.meetingId = meetingId;
+    filter.meetingId = readId(req.query.meetingId);
   }
 
-  const protocols = await Protocol.findAll({
-    where,
-    include: protocolInclude,
-    order: protocolOrder,
-  });
+  const protocols = await Protocol.find(filter).sort({ createdAt: 1 });
   res.json(protocols.map(formatProtocol));
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
   const id = readId(req.params.id);
-  const protocol = await Protocol.findByPk(id, {
-    include: protocolInclude,
-    order: protocolOrder,
-  });
+  const protocol = await Protocol.findById(id);
   if (!protocol) {
     throw createError(404, 'Протокол не найден');
   }
@@ -137,22 +150,7 @@ router.post('/', authenticate, asyncHandler(async (req, res) => {
   const data = buildProtocol(req.body);
   await ensureMeeting(data.meetingId);
 
-  const protocol = await sequelize.transaction(async (transaction) => {
-    const created = await Protocol.create({
-      meetingId: data.meetingId,
-      date: data.date,
-      secretary: data.secretary,
-      attendees: data.attendees,
-      summary: data.summary,
-    }, { transaction });
-    await saveDecisions(data, created, transaction);
-    return Protocol.findByPk(created.id, {
-      include: protocolInclude,
-      order: protocolOrder,
-      transaction,
-    });
-  });
-
+  const protocol = await Protocol.create(data);
   res.status(201).json(formatProtocol(protocol));
 }));
 
@@ -161,40 +159,84 @@ router.put('/:id', authenticate, asyncHandler(async (req, res) => {
   const data = buildProtocol(req.body);
   await ensureMeeting(data.meetingId);
 
-  const protocol = await sequelize.transaction(async (transaction) => {
-    const current = await Protocol.findByPk(id, { transaction });
-    if (!current) {
-      throw createError(404, 'Протокол не найден');
-    }
-
-    await current.update({
-      meetingId: data.meetingId,
-      date: data.date,
-      secretary: data.secretary,
-      attendees: data.attendees,
-      summary: data.summary,
-    }, { transaction });
-    await Decision.destroy({ where: { protocolId: id }, transaction });
-    await saveDecisions(data, current, transaction);
-    return Protocol.findByPk(id, {
-      include: protocolInclude,
-      order: protocolOrder,
-      transaction,
-    });
-  });
-
+  const protocol = await Protocol.findByIdAndUpdate(id, data, { new: true, runValidators: true });
+  if (!protocol) {
+    throw createError(404, 'Протокол не найден');
+  }
   res.json(formatProtocol(protocol));
 }));
 
 router.delete('/:id', authenticate, isAdmin, asyncHandler(async (req, res) => {
   const id = readId(req.params.id);
-  const protocol = await Protocol.findByPk(id);
+  const protocol = await Protocol.findByIdAndDelete(id);
   if (!protocol) {
     throw createError(404, 'Протокол не найден');
   }
-
-  await protocol.destroy();
   res.json({ message: 'Протокол удалён', id });
+}));
+
+// --- Работа с вложенным массивом decisions ---
+
+// Добавление решения в протокол: $push.
+router.post('/:id/decisions', authenticate, asyncHandler(async (req, res) => {
+  const id = readId(req.params.id);
+  const decision = buildDecision(req.body);
+
+  const protocol = await Protocol.findByIdAndUpdate(
+    id,
+    { $push: { decisions: decision } },
+    { new: true, runValidators: true },
+  );
+  if (!protocol) {
+    throw createError(404, 'Протокол не найден');
+  }
+  res.status(201).json(formatProtocol(protocol));
+}));
+
+// Обновление элемента внутри массива: $set + arrayFilters.
+router.patch('/:id/decisions/:decisionId', authenticate, asyncHandler(async (req, res) => {
+  const id = readId(req.params.id);
+  const decisionId = readId(req.params.decisionId);
+
+  const patch = buildDecisionPatch(req.body);
+  if (Object.keys(patch).length === 0) {
+    throw createError(400, 'Нет полей для обновления');
+  }
+
+  const set = {};
+  for (const [key, value] of Object.entries(patch)) {
+    set[`decisions.$[elem].${key}`] = value;
+  }
+
+  const protocol = await Protocol.findByIdAndUpdate(
+    id,
+    { $set: set },
+    {
+      arrayFilters: [{ 'elem._id': new mongoose.Types.ObjectId(decisionId) }],
+      new: true,
+      runValidators: true,
+    },
+  );
+  if (!protocol) {
+    throw createError(404, 'Протокол не найден');
+  }
+  res.json(formatProtocol(protocol));
+}));
+
+// Удаление элемента из вложенного массива: $pull.
+router.delete('/:id/decisions/:decisionId', authenticate, asyncHandler(async (req, res) => {
+  const id = readId(req.params.id);
+  const decisionId = readId(req.params.decisionId);
+
+  const protocol = await Protocol.findByIdAndUpdate(
+    id,
+    { $pull: { decisions: { _id: new mongoose.Types.ObjectId(decisionId) } } },
+    { new: true },
+  );
+  if (!protocol) {
+    throw createError(404, 'Протокол не найден');
+  }
+  res.json(formatProtocol(protocol));
 }));
 
 module.exports = router;

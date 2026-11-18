@@ -1,6 +1,5 @@
 const express = require('express');
-const { Op } = require('sequelize');
-const { Meeting, Agenda, Protocol } = require('../../models');
+const { Meeting } = require('../../models');
 const {
   createError,
   readId,
@@ -18,9 +17,13 @@ const router = express.Router();
 
 const STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'];
 
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function formatMeeting(meeting) {
   return {
-    id: meeting.id,
+    id: meeting._id.toString(),
     title: meeting.title,
     date: meeting.date,
     location: meeting.location,
@@ -55,46 +58,34 @@ function buildMeeting(body) {
 }
 
 router.get('/', asyncHandler(async (req, res) => {
-  const where = {};
+  const filter = {};
 
   if (req.query.status !== undefined) {
     if (!STATUSES.includes(req.query.status)) {
       throw createError(400, `Параметр status должен быть одним из: ${STATUSES.join(', ')}`);
     }
-    where.status = req.query.status;
-  }
-
-  if (req.query.organizer !== undefined) {
-    const organizer = String(req.query.organizer).trim();
-    if (!organizer) {
-      throw createError(400, 'Параметр organizer не должен быть пустым');
-    }
-    const pattern = `%${organizer.replace(/[\\%_]/g, '\\$&')}%`;
-    where.organizer = { [Op.iLike]: pattern };
+    filter.status = req.query.status;
   }
 
   if (req.query.search !== undefined) {
     const search = String(req.query.search).trim();
     if (search) {
-      const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-      where[Op.or] = [
-        { title: { [Op.iLike]: pattern } },
-        { organizer: { [Op.iLike]: pattern } },
-        { location: { [Op.iLike]: pattern } },
+      const pattern = new RegExp(escapeRegex(search), 'i');
+      filter.$or = [
+        { title: pattern },
+        { organizer: pattern },
+        { location: pattern },
       ];
     }
   }
 
-  const meetings = await Meeting.findAll({
-    where,
-    order: [['id', 'ASC']],
-  });
+  const meetings = await Meeting.find(filter).sort({ date: 1 });
   res.json(meetings.map(formatMeeting));
 }));
 
 router.get('/:id', asyncHandler(async (req, res) => {
   const id = readId(req.params.id);
-  const meeting = await Meeting.findByPk(id);
+  const meeting = await Meeting.findById(id);
   if (!meeting) {
     throw createError(404, 'Встреча не найдена');
   }
@@ -108,32 +99,23 @@ router.post('/', authenticate, asyncHandler(async (req, res) => {
 
 router.put('/:id', authenticate, asyncHandler(async (req, res) => {
   const id = readId(req.params.id);
-  const meeting = await Meeting.findByPk(id);
+  const meeting = await Meeting.findByIdAndUpdate(id, buildMeeting(req.body), {
+    new: true,
+    runValidators: true,
+  });
   if (!meeting) {
     throw createError(404, 'Встреча не найдена');
   }
-
-  await meeting.update(buildMeeting(req.body));
   res.json(formatMeeting(meeting));
 }));
 
 router.delete('/:id', authenticate, isAdmin, asyncHandler(async (req, res) => {
   const id = readId(req.params.id);
-  const meeting = await Meeting.findByPk(id);
+  const meeting = await Meeting.findByIdAndDelete(id);
   if (!meeting) {
     throw createError(404, 'Встреча не найдена');
   }
-
-  const removedAgendas = await Agenda.count({ where: { meetingId: id } });
-  const removedProtocols = await Protocol.count({ where: { meetingId: id } });
-  await meeting.destroy();
-
-  res.json({
-    message: 'Встреча удалена',
-    id,
-    removedAgendas,
-    removedProtocols,
-  });
+  res.json({ message: 'Встреча удалена', id });
 }));
 
 module.exports = router;
